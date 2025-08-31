@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>ניהול תחרויות טניס שולחן</title>
+<style>
+/*עיצוב ראשי*/
+body { font-family: Tahoma, Arial, sans-serif; background:#f9f9f9; margin:0; padding:0; }
+h1, h2 { text-align:center; color:#002b7f; margin-top:30px; }
+h1 { font-size:28px; }
+
+/* טאבים של תחרויות */
+#tournamentTabs { 
+  overflow:hidden; border-bottom:3px solid #444; margin-top:20px; 
+  display:flex; justify-content:center; flex-wrap:wrap; gap:8px; 
+}
+#tournamentTabs button { 
+  background:#e0e0e0; border:2px solid #888; cursor:pointer; padding:12px 20px; 
+  font-size:18px; border-radius:10px 10px 0 0; font-weight:bold; transition:0.3s;
+}
+#tournamentTabs button:hover { background:#d0d0d0; }
+#tournamentTabs button.active { 
+  background:#002b7f; color:white; border:2px solid #002b7f; 
+  border-bottom:3px solid white; transform:translateY(2px);
+}
+
+/* תוכן כל תחרות */
+.tournamentContent { display:none; padding:20px; text-align:center; }
+.tournamentContent.active { display:block; }
+
+/* טאבים פנימיים */
+.tab { overflow:hidden; border-bottom:1px solid #ccc; margin-top:20px; display:flex; justify-content:center; flex-wrap:wrap; gap:5px; }
+.tab button { background:#eee; border:1px solid #aaa; cursor:pointer; padding:8px 14px; font-size:15px; border-radius:6px 6px 0 0; }
+.tab button:hover { background:#ddd; }
+.tab button.active { background:#ccc; font-weight:bold; }
+.tabcontent { display:none; padding:10px 0; text-align:center; }
+
+/* טבלאות */
+table { border-collapse:collapse; width:80%; margin:20px auto; background:white; box-shadow:0 2px 4px rgba(0,0,0,0.1); }
+th, td { border:1px solid #000; padding:10px; text-align:center; }
+tr:nth-child(even) td { background:#f2f2f2; }
+
+input[type="text"], input[type="number"] { 
+  padding:8px; margin:4px; border:1px solid #aaa; 
+  border-radius:6px; text-align:center; width:200px; /* שדה שמות גדול יותר */
+}
+
+.hidden { display:none; }
+
+#playerCountSection, #groupsSection, #knockoutSection { display:flex; flex-direction:column; align-items:center; margin-top:30px; }
+
+/* ברקט נוקאוט */
+.bracket {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 60px;
+  margin: 40px auto;
+  direction: rtl;
+}
+.round {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  position: relative;
+}
+.match {
+  background: #fff;
+  border: 2px solid #002b7f;
+  padding: 10px;
+  text-align: center;
+  min-width: 160px;
+  border-radius: 8px;
+  position: relative;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  word-break: break-word;
+}
+
+/* קווים אופקיים שמחברים שחקנים לראונד הבא */
+.match::after {
+  content: "";
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  width: 30px;
+  height: 2px;
+  background: #000;
+}
+
+/* קווים אנכיים – מחברים זוג משחקים לכניסה אחת */
+.round::after {
+  content: "";
+  position: absolute;
+  left: 100%;
+  top: 20px;
+  bottom: 20px;
+  width: 2px;
+  background: #000;
+}
+
+.round:last-child::after,
+.round:last-child .match::after {
+  display: none;
+}
+
+/* תצוגת מנצח */
+.champion {
+  margin-top: 12px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #0a3f7a;
+}
+
+/* סגנון למקרה של מנצח אוטומטי */
+.match .auto {
+  margin-top:6px;
+  font-weight:700;
+  color:#007a00;
+}
+</style>
+</head>
+<body>
+<h1>ניהול תחרויות טניס שולחן</h1>
+
+<div style="text-align:center; margin-top:20px;">
+  <button onclick="addTournament()">➕ להוספת תחרות</button>
+</div>
+
+<div id="tournamentTabs"></div>
+<div id="tournamentContainer"></div>
+
+<script>
+let tournamentCount = 0;
+let tournaments = {}; 
+
+function addTournament(){
+  const name = prompt("הכנס שם לתחרות:");
+  if(!name) return;
+
+  tournamentCount++;
+  const tid = "tournament"+tournamentCount;
+
+  // כפתור טאב
+  const tabBtn = document.createElement("button");
+  tabBtn.textContent = name;
+  tabBtn.id = "tabbtn_"+tid;
+  tabBtn.onclick = ()=>openTournament(tid);
+  tabBtn.style.position = "relative";
+
+  // כפתור X לסגירת התחרות
+  const closeBtn = document.createElement("span");
+  closeBtn.textContent = "✖";
+  closeBtn.style.position = "absolute";
+  closeBtn.style.left = "5px";
+  closeBtn.style.top = "2px";
+  closeBtn.style.cursor = "pointer";
+  closeBtn.style.color = "#900";
+  closeBtn.style.fontWeight = "bold";
+  closeBtn.title = "סגור תחרות";
+  closeBtn.onclick = (e)=>{
+      e.stopPropagation();
+      if(confirm(`אתה בטוח שאתה רוצה לסגור את התחרות: "${name}"?`)){
+          closeTournament(tid);
+      }
+  };
+  tabBtn.appendChild(closeBtn);
+  document.getElementById("tournamentTabs").appendChild(tabBtn);
+
+  // תוכן התחרות
+  const contentDiv = document.createElement("div");
+  contentDiv.className="tournamentContent";
+  contentDiv.id=tid;
+  contentDiv.innerHTML=`
+    <h2>${name}</h2>
+    <div id="playerCountSection${tid}">
+      <label>כמה בתים (16-1):</label>
+      <input type="number" min="1" max="16" id="groupCountInput${tid}" placeholder="בחר מספר בתים">
+      <button id="create-groups${tid}">צור בתים</button>
+    </div>
+    <div id="groupsSection${tid}" class="hidden"></div>
+    <div id="knockoutSection${tid}" class="hidden">
+      <h2 style="text-align:center;">עץ נוקאוט</h2>
+      <button onclick="generateKnockout('${tid}')">צור עץ נוקאוט</button>
+      <div id="bracket${tid}" class="bracket"></div>
+      <div id="champion${tid}" class="champion"></div>
+    </div>`;
+
+  document.getElementById("tournamentContainer").appendChild(contentDiv);
+
+  tournaments[tid] = {
+    groups: [],
+    groupCount: 0,
+    knockoutPlayers: [],
+    rounds:[]
+  };
+
+  document.getElementById("create-groups"+tid).addEventListener("click", ()=>createGroups(tid));
+  openTournament(tid);
+}
+
+function openTournament(tid){
+  document.querySelectorAll("#tournamentTabs button").forEach(b=>b.classList.remove("active"));
+  document.querySelectorAll(".tournamentContent").forEach(c=>c.classList.remove("active"));
+  document.getElementById("tabbtn_"+tid).classList.add("active");
+  document.getElementById(tid).classList.add("active");
+}
+
+function createGroups(tid) {
+  const sel = document.getElementById("groupCountInput"+tid);
+  let groupCount = parseInt(sel.value,10);
+  if(isNaN(groupCount) || groupCount<1 || groupCount>16) { alert("יש לבחור מספר בין 1 ל-16"); return; }
+  tournaments[tid].groupCount = groupCount;
+  tournaments[tid].groups = [];
+  for(let g=0; g<groupCount; g++) tournaments[tid].groups.push([]);
+  renderGroups(tid);
+}
+
+function renderGroups(tid) {
+  const tdata = tournaments[tid];
+  const container = document.getElementById("groupsSection"+tid);
+  container.innerHTML = '';
+  const tabDiv = document.createElement("div");
+  tabDiv.className='tab';
+  for(let g=0; g<tdata.groupCount; g++){
+    const btn = document.createElement("button");
+    btn.textContent = `בית ${g+1}`;
+    btn.onclick = ()=>openGroupTab(tid,g);
+    if(g===0) btn.className='active';
+    tabDiv.appendChild(btn);
+  }
+  if(tdata.groupCount>1){
+    const knockoutBtn = document.createElement("button");
+    knockoutBtn.textContent="עץ נוקאוט";
+    knockoutBtn.onclick = ()=>openKnockoutTab(tid);
+    tabDiv.appendChild(knockoutBtn);
+  }
+  container.appendChild(tabDiv);
+
+  for(let g=0; g<tdata.groupCount; g++){
+    const div = document.createElement("div");
+    div.id=`${tid}_group${g}`;
+    div.className='tabcontent';
+    if(g===0) div.style.display='block';
+    div.innerHTML = `
+      <label>כמה שחקנים בבית (3–20):</label>
+      <input type="number" min="3" max="20" id="${tid}_playerCount${g}" placeholder="מספר שחקנים">
+      <button id="${tid}_setupBtn${g}">צור שחקנים</button>
+      <div id="${tid}_playersInputs${g}"></div>
+      <div id="${tid}_preRanking${g}"></div>
+      <div id="${tid}_matches${g}"></div>
+      <div id="${tid}_ranking${g}"></div>
+    `;
+    container.appendChild(div);
+    document.getElementById(`${tid}_setupBtn${g}`).addEventListener("click", ()=>setupPlayers(tid,g));
+  }
+  container.classList.remove("hidden");
+  document.getElementById("knockoutSection"+tid).style.display='none';
+}
+
+function openGroupTab(tid,index){
+  const tabcontent = document.querySelectorAll(`#groupsSection${tid} .tabcontent`);
+  tabcontent.forEach(c=>c.style.display='none');
+  tabcontent[index].style.display='block';
+  const tabbuttons = document.querySelectorAll(`#groupsSection${tid} .tab button`);
+  tabbuttons.forEach(b=>b.classList.remove("active"));
+  tabbuttons[index].classList.add("active");
+  document.getElementById("knockoutSection"+tid).style.display='none';
+}
+
+function openKnockoutTab(tid){
+  const tabcontent = document.querySelectorAll(`#groupsSection${tid} .tabcontent`);
+  tabcontent.forEach(c=>c.style.display='none');
+  document.getElementById("knockoutSection"+tid).style.display='block';
+  const tabbuttons = document.querySelectorAll(`#groupsSection${tid} .tab button`);
+  tabbuttons.forEach(b=>b.classList.remove("active"));
+  tabbuttons[tabbuttons.length-1].classList.add("active");
+}
+
+function setupPlayers(tid, gIndex){
+  const n = parseInt(document.getElementById(`${tid}_playerCount${gIndex}`).value,10);
+  if(isNaN(n)||n<3||n>20) { alert("יש להזין מספר בין 3 ל-20"); return; }
+
+  const div = document.getElementById(`${tid}_playersInputs${gIndex}`);
+  div.innerHTML='';
+
+  // אתחול השחקנים בבית
+  tournaments[tid].groups[gIndex] = Array(n).fill('').map(()=>{ return {name:'', points:0, wins:0}; });
+
+  for(let i=0; i<n; i++){
+    const input = document.createElement("input");
+    input.type='text';
+    input.placeholder=`שם שחקן ${i+1}`;
+
+    // בדיקה למניעת כפילויות בתחרות
+    input.onchange = (e) => {
+        const newName = e.target.value.trim();
+        let duplicate = false;
+
+        // בדיקה בכל הבתים של התחרות
+        tournaments[tid].groups.forEach((group, gi) => {
+            group.forEach((p, pi) => {
+                if(p.name === newName && (gi !== gIndex || pi !== i)){
+                    duplicate = true;
+                }
+            });
+        });
+
+        if(duplicate){
+            alert(`שחקן בשם "${newName}" כבר קיים בתחרות זו. בחר שם אחר.`);
+            e.target.value = "";
+            tournaments[tid].groups[gIndex][i].name = "";
+        } else {
+            tournaments[tid].groups[gIndex][i].name = newName;
+        }
+
+        updatePreRanking(tid, gIndex);
+    };
+
+    div.appendChild(input);
+    div.appendChild(document.createElement("br"));
+  }
+
+  // כפתור ליצירת משחקים
+  const btn = document.createElement("button");
+  btn.textContent='צור משחקים';
+  btn.onclick=()=>createMatches(tid,gIndex);
+  div.appendChild(btn);
+
+  updatePreRanking(tid,gIndex);
+}
+
+function updatePreRanking(tid,gIndex){
+  const players = tournaments[tid].groups[gIndex];
+  let rankingHTML=`<h3>דירוג מקדימה בית ${gIndex+1}</h3><table><thead><tr><th>מקום</th><th>שחקן</th></tr></thead><tbody>`;
+  players.forEach((p,i)=>{ rankingHTML+=`<tr><td>${i+1}</td><td>${p.name}</td></tr>`; });
+  rankingHTML+='</tbody></table>';
+  document.getElementById(`${tid}_preRanking${gIndex}`).innerHTML = rankingHTML;
+}
+
+function getITTFMatchOrder(n) {
+  let matches = [];
+  if (n === 3) {
+    matches = [[0,1],[2,0],[1,2]];
+  } else if (n === 4) {
+    matches = [[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]];
+  } else if (n === 5) {
+    matches = [[0,4],[1,3],[2,0],[4,1],[3,2],[0,1],[2,4],[3,0],[1,2],[4,3]];
+  } else {
+    matches = bergerTable(n);
+  }
+  return matches;
+}
+
+function bergerTable(n){
+  let arr = Array.from({length:n},(_,i)=>i);
+  if (n % 2 === 1) { arr.push(null); n++; }
+  let rounds = n-1;
+  let res = [];
+  for (let r=0; r<rounds; r++) {
+    for (let i=0;i<n/2;i++) {
+      let a = arr[i], b = arr[n-1-i];
+      if (a!==null && b!==null) res.push([a,b]);
+    }
+    arr.splice(1,0,arr.pop());
+  }
+  return res;
+}
+
+function createMatches(tid,gIndex){
+  const players = tournaments[tid].groups[gIndex];
+  const n = players.length;
+  const matchesDiv = document.getElementById(`${tid}_matches${gIndex}`);
+  matchesDiv.innerHTML='<h3>משחקים</h3><table><thead><tr><th>משחק</th><th>שחקן 1</th><th>שחקן 2</th><th>תוצאה</th></tr></thead><tbody></tbody></table>';
+  const tbody = matchesDiv.querySelector("tbody");
+
+  let matchOrder = getITTFMatchOrder(n);
+
+  matchOrder.forEach((pair, index)=>{
+    const i = pair[0], j = pair[1];
+    const tr = document.createElement("tr");
+    tr.innerHTML=`<td>${index+1}</td><td>${players[i].name}</td><td>${players[j].name}</td>
+      <td>
+        <input type="number" placeholder="שחקן 1" style="width:60px">
+        <input type="number" placeholder="שחקן 2" style="width:60px">
+      </td>`;
+    tbody.appendChild(tr);
+  });
+
+  const btn = document.createElement("button");
+  btn.textContent='חשב דירוג סופי';
+  btn.onclick=()=>calculateResults(tid,gIndex);
+  matchesDiv.appendChild(btn);
+}
+
+function calculateResults(tid, gIndex) {
+    const matchesDiv = document.getElementById(`${tid}_matches${gIndex}`);
+    const tbody = matchesDiv.querySelector("tbody");
+    const players = tournaments[tid].groups[gIndex];
+
+    // איפוס נקודות וניצחונות
+    players.forEach(p => { p.points = 0; p.wins = 0; });
+
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+
+    // חישוב ניצחונות ונקודות מכל משחק
+    for (let row of rows) {
+        const tds = row.querySelectorAll("td");
+        const idx1 = players.findIndex(p => p.name === tds[1].textContent);
+        const idx2 = players.findIndex(p => p.name === tds[2].textContent);
+        const score1 = parseInt(tds[3].querySelectorAll("input")[0].value, 10);
+        const score2 = parseInt(tds[3].querySelectorAll("input")[1].value, 10);
+
+        if (isNaN(score1) || isNaN(score2) || score1 === score2) {
+            alert("חייב להיות מנצח בכל משחק (אין תיקו)");
+            return;
+        }
+
+        if (score1 > score2) {
+            players[idx1].wins++;
+            players[idx1].points += score1;
+            players[idx2].points += score2;
+        } else {
+            players[idx2].wins++;
+            players[idx2].points += score2;
+            players[idx1].points += score1;
+        }
+    }
+
+    // מיון לפי ניצחונות ואז נקודות
+    players.sort((a, b) => b.wins - a.wins || b.points - a.points);
+
+    // מציאת כל השחקנים עם נקודות שוות למקומות ראשון ושני
+    const topWins = players[0].wins;
+    const topPoints = players[0].points;
+    const tiedForFirst = players.filter(p => p.wins === topWins && p.points === topPoints);
+
+    let secondWins = 0, secondPoints = 0;
+    if (tiedForFirst.length === 1 && players.length > 1) {
+        secondWins = players[1].wins;
+        secondPoints = players[1].points;
+    }
+    const tiedForSecond = players.filter(p => 
+        p.wins === secondWins && p.points === secondPoints && !tiedForFirst.includes(p)
+    );
+
+    // פונקציה ליצירת משחקי הכרעה
+    function createTieBreaker(tiedPlayers, place) {
+        const tieDiv = document.createElement("div");
+        tieDiv.innerHTML = `<h4>משחקי הכרעה לבית ${gIndex+1} - ${place}</h4>`;
+        
+        for (let i = 0; i < tiedPlayers.length; i+=2) {
+            if (i+1 < tiedPlayers.length) {
+                const p1 = tiedPlayers[i];
+                const p2 = tiedPlayers[i+1];
+                const matchHTML = document.createElement("div");
+                matchHTML.innerHTML = `
+                    ${p1.name} vs ${p2.name}:
+                    <input type="number" placeholder="${p1.name}" style="width:60px">
+                    <input type="number" placeholder="${p2.name}" style="width:60px">
+                    <button>הכריע מנצח</button>
+                `;
+                const btn = matchHTML.querySelector("button");
+                btn.onclick = () => {
+                    const val1 = parseInt(matchHTML.querySelectorAll("input")[0].value, 10);
+                    const val2 = parseInt(matchHTML.querySelectorAll("input")[1].value, 10);
+                    if (isNaN(val1) || isNaN(val2) || val1 === val2) {
+                        alert("חייב להיות מנצח במשחק ההכרעה");
+                        return;
+                    }
+                    const winner = val1 > val2 ? p1 : p2;
+                    const loser = val1 > val2 ? p2 : p1;
+                    // עדכון מיקום בבית
+                    if (place === "מקום ראשון") {
+                        players[0] = winner;
+                        if (players.length>1) players[1] = loser;
+                    } else if (place === "מקום שני") {
+                        players[1] = winner;
+                    }
+                    renderFinalRanking(players, tid, gIndex);
+                    matchHTML.remove();
+                };
+                tieDiv.appendChild(matchHTML);
+            } else {
+                // שחקן אחד בלי יריב - עובר אוטומטית
+                if (place === "מקום ראשון") players[0] = tiedPlayers[i];
+                if (place === "מקום שני") players[1] = tiedPlayers[i];
+            }
+        }
+        matchesDiv.appendChild(tieDiv);
+    }
+
+    // יצירת משחקי הכרעה במידת הצורך
+    if (tiedForFirst.length > 1) {
+        createTieBreaker(tiedForFirst, "מקום ראשון");
+        return; // מחכים להכרעה לפני הצגת הדירוג הסופי
+    }
+    if (tiedForSecond.length > 1) {
+        createTieBreaker(tiedForSecond, "מקום שני");
+        return;
+    }
+
+    // אם אין שוויון – מציג דירוג סופי רגיל
+    renderFinalRanking(players, tid, gIndex);
+}
+
+// פונקציה להצגת דירוג סופי
+function renderFinalRanking(players, tid, gIndex){
+  let rankingHTML=`<h3>דירוג סופי בית ${gIndex+1}</h3><table><thead><tr><th>מקום</th><th>שחקן</th><th>ניצחונות</th><th>נקודות</th></tr></thead><tbody>`;
+  players.forEach((p,i)=>{ rankingHTML+=`<tr><td>${i+1}</td><td>${p.name}</td><td>${p.wins}</td><td>${p.points}</td></tr>`; });
+  rankingHTML+='</tbody></table>';
+  document.getElementById(`${tid}_ranking${gIndex}`).innerHTML = rankingHTML;
+}
+
+function advanceAllByes(tid){
+  const tdata = tournaments[tid];
+  if (!tdata || !tdata._bracket) return;
+
+  tdata._bracket.forEach((round, roundIdx) => {
+    round.forEach((match, matchIdx) => {
+      const p1 = match.querySelector(".p1")?.textContent.trim() || "";
+      const p2 = match.querySelector(".p2")?.textContent.trim() || "";
+      
+      if ((p1 && (!p2 || p2==="BYE")) || (p2 && (!p1 || p1==="BYE"))) {
+
+        const autoW = p1 && (!p2 || p2==="BYE") ? p1 : p2;
+
+        let wDiv = match.querySelector(".auto");
+        if (!wDiv) { 
+          wDiv = document.createElement("div"); 
+          wDiv.className="auto"; 
+          match.appendChild(wDiv); 
+        }
+        wDiv.textContent = `מנצח אוטומטי: ${autoW}`;
+        placeInNextRound(tid, roundIdx, matchIdx, autoW);
+      }
+    });
+  });
+}
+
+function tryAutoAdvance(roundDiv, matchIndex, tdata){
+  const targetMatches = roundDiv.querySelectorAll(".match");
+  const matchElemIndex = Math.floor(matchIndex / 2);
+  const targetMatch = targetMatches[matchElemIndex];
+  if(!targetMatch) return;
+
+  const span1 = targetMatch.querySelector(".p1");
+  const span2 = targetMatch.querySelector(".p2");
+  const in1 = targetMatch.querySelectorAll("input")[0];
+  const in2 = targetMatch.querySelectorAll("input")[1];
+  const btn = targetMatch.querySelector("button");
+
+  if(span1.textContent && span2.textContent && btn){
+    btn.click();
+  }
+}
+
+/* ==== סימון מנצח והסרת תיבות קלט ==== */
+function setAutoWinner(matchDiv, winnerName, label='מנצח אוטומטי') {
+  // הסר את כל שדות הקלט כדי למנוע הזנה נוספת
+  matchDiv.querySelectorAll('input').forEach(inp => inp.remove());
+
+  // בדיקה אם כבר קיים div עם המנצח
+  let wDiv = matchDiv.querySelector('.auto');
+  if (!wDiv) {
+    wDiv = document.createElement('div');
+    wDiv.className = 'auto';
+    matchDiv.appendChild(wDiv);
+  }
+  wDiv.textContent = `${label}: ${winnerName}`;
+}
+
+function getRoundName(roundIndex, totalRounds) {
+    const roundsLeft = totalRounds - roundIndex;
+    switch(roundsLeft) {
+        case 1: return "גמר";
+        case 2: return "חצי גמר";
+        case 3: return "רבע גמר";
+        case 4: return "שמינית גמר";
+        case 5: return "16";
+        case 6: return "32";
+        default: return `שלב ${roundIndex+1}`;
+    }
+}
+
+/* יצירת עץ נוקאוט – כולל טיפול BYE מול BYE */
+function generateKnockout(tid) {
+  const tdata = tournaments[tid];
+  if (!tdata) return;
+
+  // בנה רשימת שחקנים מוסמכים (מקום ראשון ושני מכל בית)
+  let qualified = [];
+  for (let g = 0; g < tdata.groups.length; g++) {
+    if (tdata.groups[g].length) {
+      let sorted = [...tdata.groups[g]].sort((a,b)=> b.wins - a.wins || b.points - a.points);
+      if (sorted[0]?.name) qualified.push({ name: sorted[0].name, pos: 1 });
+      if (sorted[1]?.name) qualified.push({ name: sorted[1].name, pos: 2 });
+    }
+  }
+  if (qualified.length < 2) { alert("אין מספיק שחקנים לנוקאוט"); return; }
+
+  // סדר אקראי firsts/seconds
+  let firsts  = qualified.filter(p => p.pos === 1).sort(()=>Math.random()-0.5);
+  let seconds = qualified.filter(p => p.pos === 2).sort(()=>Math.random()-0.5);
+  let ordered = [];
+  for (let i=0; i<Math.max(firsts.length, seconds.length); i++){
+    if (firsts[i])  ordered.push(firsts[i]);
+    if (seconds[i]) ordered.push(seconds[i]);
+  }
+
+  // גודל בראקט כחזקת 2
+  let roundsCount = Math.ceil(Math.log2(ordered.length));
+  let size = Math.pow(2, roundsCount);
+  while (ordered.length < size) ordered.push({ name:"BYE" });
+
+  const bracketDiv = document.getElementById("bracket"+tid);
+  if (!bracketDiv) { alert("לא נמצא אלמנט בראקט עבור התחרות: " + tid); return; }
+  bracketDiv.innerHTML = '';
+  tdata._bracket = [];
+
+  // פונקציה לקבלת שם הסיבוב
+  function getRoundName(roundIndex, totalRounds) {
+    const roundsLeft = totalRounds - roundIndex;
+    switch(roundsLeft) {
+        case 1: return "גמר";
+        case 2: return "חצי גמר";
+        case 3: return "רבע גמר";
+        default: return `שלב ${roundIndex+1}`;
+    }
+  }
+
+  // בונים סיבובים
+  let current = ordered.map(p => p.name);
+  let roundIndex = 0;
+  const totalRounds = roundsCount;
+
+  while (current.length > 1) {
+    const roundDiv = document.createElement("div");
+    roundDiv.className = "round";
+    roundDiv.innerHTML = `<h3>${getRoundName(roundIndex, totalRounds)}</h3>`;
+    tdata._bracket[roundIndex] = [];
+
+    for (let i=0; i<current.length; i+=2) {
+      const p1 = current[i]   || "";
+      const p2 = current[i+1] || "";
+
+      const mdiv = document.createElement("div");
+      mdiv.className = "match";
+      mdiv.dataset.round = String(roundIndex);
+      mdiv.dataset.match = String(i/2);
+
+      const span1 = document.createElement("span");
+      span1.className = "p1"; span1.textContent = p1;
+      const span2 = document.createElement("span");
+      span2.className = "p2"; span2.textContent = p2;
+
+      mdiv.appendChild(span1);
+      mdiv.appendChild(document.createTextNode(" vs "));
+      mdiv.appendChild(span2);
+      mdiv.appendChild(document.createElement("br"));
+
+      // צור תיבות קלט רק אם שני השחקנים קיימים ואינם BYE
+      if (p1 && p2 && p1 !== "BYE" && p2 !== "BYE") {
+        const in1 = document.createElement("input");
+        in1.type = "number"; in1.style.width = "40px";
+        const in2 = document.createElement("input");
+        in2.type = "number"; in2.style.width = "40px";
+
+        mdiv.appendChild(in1);
+        mdiv.appendChild(document.createTextNode(" - "));
+        mdiv.appendChild(in2);
+        mdiv.appendChild(document.createElement("br"));
+
+        in1.addEventListener("input", ()=>autoDecideWinner(in1, in2));
+        in2.addEventListener("input", ()=>autoDecideWinner(in1, in2));
+      }
+      // אם יש BYE אחד או שניים – העלייה אוטומטית בלבד
+      else {
+        const autoWinner = (p1 && p1 !== "BYE") ? p1 : p2;
+        if(autoWinner) setAutoWinner(mdiv, autoWinner);
+        setTimeout(()=>placeInNextRound(tid, roundIndex, i/2, autoWinner),0);
+      }
+
+      roundDiv.appendChild(mdiv);
+      tdata._bracket[roundIndex].push(mdiv);
+    }
+
+    bracketDiv.appendChild(roundDiv);
+    current = new Array(current.length/2).fill("");
+    roundIndex++;
+  }
+
+  openKnockoutTab(tid);
+}
+
+/* קידום מנצח לשלב הבא – כולל כל מקרי ה-BYE */
+function placeInNextRound(tid, roundIdx, matchIdx, winnerName){
+  const tdata = tournaments[tid];
+  const nextRound = tdata._bracket[roundIdx + 1];
+
+  // אין סיבוב הבא – זה האלוף
+  if (!nextRound) {
+    const champEl = document.getElementById("champion"+tid);
+    if (champEl) champEl.textContent = `האלוף: ${winnerName}`;
+    return;
+  }
+
+  const nextMatch = nextRound[Math.floor(matchIdx/2)];
+  if (!nextMatch) return;
+
+  const slotIsP1 = (matchIdx % 2 === 0);
+  const targetSpan = nextMatch.querySelector(slotIsP1 ? ".p1" : ".p2");
+  if (targetSpan) targetSpan.textContent = winnerName;
+
+  const p1 = (nextMatch.querySelector(".p1")?.textContent || "").trim();
+  const p2 = (nextMatch.querySelector(".p2")?.textContent || "").trim();
+
+  // טיפול במשחק עם שני שחקנים ללא שם
+  if (!p1 && !p2) {
+    // קידום אחד אוטומטי (לפי סדר, P1)
+    setAutoWinner(nextMatch, "שחקן אוטומטי");
+    // הסרת תיבות קלט אם קיימות
+    nextMatch.querySelectorAll("input").forEach(i => i.remove());
+    // קידום לשלב הבא
+    const nextIdx = tdata._bracket[roundIdx+1].indexOf(nextMatch);
+    setTimeout(()=>placeInNextRound(tid, roundIdx+1, nextIdx, "שחקן אוטומטי"), 0);
+    return;
+  }
+
+  // מקרים אוטומטיים בסיבוב הבא
+  if ((p1 === "" && p2 === "") || (p1==="BYE" && p2==="BYE")) {
+    setAutoWinner(nextMatch, p1 || "BYE");
+    const nextIdx = tdata._bracket[roundIdx+1].indexOf(nextMatch);
+    setTimeout(()=>placeInNextRound(tid, roundIdx+1, nextIdx, p1 || "BYE"), 0);
+    return;
+  }
+  if ((p1==="BYE" && p2) || (p2==="BYE" && p1)) {
+    const autoW = (p1==="BYE") ? p2 : p1;
+    setAutoWinner(nextMatch, autoW);
+    const nextIdx = tdata._bracket[roundIdx+1].indexOf(nextMatch);
+    setTimeout(()=>placeInNextRound(tid, roundIdx+1, nextIdx, autoW), 0);
+    return;
+  }
+
+  // אם יש שני שחקנים אמיתיים – צור תיבות קלט אם אין BYE או שם ריק
+  if (p1 && p2 && p1!=="BYE" && p2!=="BYE") {
+    if (nextMatch.querySelectorAll("input").length === 0) {
+      const in1 = document.createElement("input");
+      in1.type="number"; in1.style.width="40px";
+      const in2 = document.createElement("input");
+      in2.type="number"; in2.style.width="40px";
+      nextMatch.appendChild(in1);
+      nextMatch.appendChild(document.createTextNode(" - "));
+      nextMatch.appendChild(in2);
+      nextMatch.appendChild(document.createElement("br"));
+      in1.addEventListener("input", ()=>autoDecideWinner(in1, in2));
+      in2.addEventListener("input", ()=>autoDecideWinner(in1, in2));
+    }
+  }
+
+  // הסר תיבות קלט אם השחקן היחיד עולה אוטומטית
+  if ((p1 && !p2) || (p2 && !p1)) {
+    const inputs = nextMatch.querySelectorAll("input");
+    inputs.forEach(i=>i.remove());
+  }
+
+  // קידום אוטומטי למשחקים עם שחקן יחיד
+  const thisRound = tdata._bracket[roundIdx];
+  const allResolved = thisRound.every(m => {
+    if (m.querySelector(".auto")) return true;
+    const a = (m.querySelector(".p1")?.textContent || "").trim();
+    const b = (m.querySelector(".p2")?.textContent || "").trim();
+    if ((a === "" && b === "") || (a==="BYE" && b==="BYE")) return true;
+    const ins = m.querySelectorAll("input");
+    return (ins.length===2 && ins[0].value!=="" && ins[1].value!=="");
+  });
+
+  if (allResolved) {
+    nextRound.forEach((nm, idx) => {
+      const a = (nm.querySelector(".p1")?.textContent || "").trim();
+      const b = (nm.querySelector(".p2")?.textContent || "").trim();
+      if (a && !b) { setAutoWinner(nm, a); setTimeout(()=>placeInNextRound(tid, roundIdx+1, idx, a), 0); }
+      else if (b && !a) { setAutoWinner(nm, b); setTimeout(()=>placeInNextRound(tid, roundIdx+1, idx, b), 0); }
+    });
+  }
+}
+
+/* הכרעה ידנית (קלט תוצאה) – מסמן מנצח ונועל קלט */
+function autoDecideWinner(in1, in2){
+  const s1 = parseInt(in1.value, 10);
+  const s2 = parseInt(in2.value, 10);
+  if (isNaN(s1) || isNaN(s2) || s1 === s2) return;
+
+  const matchDiv = in1.parentElement;
+  const p1 = matchDiv.querySelector(".p1").textContent.trim();
+  const p2 = matchDiv.querySelector(".p2").textContent.trim();
+  const winner = (s1 > s2) ? p1 : p2;
+
+  // סימון מנצח ונעילה
+  setAutoWinner(matchDiv, winner, "מנצח");
+
+  const roundIdx = parseInt(matchDiv.dataset.round, 10);
+  const matchIdx = parseInt(matchDiv.dataset.match, 10);
+  const bracketEl = matchDiv.closest(".bracket");
+  const tid = bracketEl.id.replace("bracket", "");
+
+  placeInNextRound(tid, roundIdx, matchIdx, winner);
+}
+
+function closeTournament(tid){
+  document.getElementById(tid).remove();
+  document.getElementById("tabbtn_"+tid).remove();
+  delete tournaments[tid];
+}
+
+</script>
+</body>
+</html>
